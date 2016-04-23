@@ -1,0 +1,23 @@
+{
+    "name": "trijin/tgbot"
+    ,"type": "library"
+    ,"description": "tgBot - библиотека для написания бота."
+    ,"version": "0.1"
+    ,"keywords": ["telegram","bot"]
+    ,"homepage": "http://trijin.ru/"
+    ,"license": "MIT"
+    ,"authors": [
+        {
+            "name": "Alex T Trijin"
+            ,"email": "trijin@gmail.com"
+            ,"role": "Developer"
+        }
+    ]
+    ,"require": {
+        "guzzlehttp/guzzle": "~6.0",
+        "vrana/notorm": "dev-master"
+    }
+    ,"autoload": {
+        "classmap": [""]
+    }
+}
