@@ -1,8 +1,8 @@
 {
     "name": "trijin/tgbot"
     ,"type": "library"
-    ,"description": "tgBot - библиотека для написания бота."
-    ,"version": "0.1"
+    ,"description": "tgBot - Р±РёР±Р»РёРѕС‚РµРєР° РґР»СЏ РЅР°РїРёСЃР°РЅРёСЏ Р±РѕС‚Р°."
+    ,"version": "0.0.1"
     ,"keywords": ["telegram","bot"]
     ,"homepage": "http://trijin.ru/"
     ,"license": "MIT"
