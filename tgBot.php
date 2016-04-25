@@ -189,7 +189,6 @@ class tgBot {
 		throw new \tgBot\Exception\Pass();
 	}
 	function getBotUsername() {
-		var_dump($this->me);
 		if(isset($this->me['username'])) {
 			return $this->me['username'];
 		}
