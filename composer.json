@@ -14,8 +14,9 @@
         }
     ]
     ,"require": {
-        "guzzlehttp/guzzle": "~6.0",
-        "vrana/notorm": "dev-master"
+        "php": ">=5.3",
+        "guzzlehttp/guzzle": "5.3.0",
+        "trijin/notorm": "dev-master"
     }
     ,"autoload": {
         "classmap": [""]
