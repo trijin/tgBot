@@ -87,8 +87,89 @@ class tgBot {
 			return false;
 		}
 	}
+	function sendAction($ch,$type){
+		$av=array('typing','upload_photo', 'record_video', 'upload_video', 'record_audio', 'upload_audio', 'upload_document', 'find_location');
+		if(!in_array($type, $av)) {
+			return false;
+		}
+
+		$array['chat_id']=$ch;
+		$array['action']=$type	;
+		$a=$this->Gc->post('sendChatAction',['form_params'=>$array]);
+		$code = $a->getStatusCode();
+		if($code>=200 && $code<500) {
+			$body=$a->getBody();
+			$ans=new tgBotMessage($body);
+			if($this->log2db && $this->db) {
+				$this->save($ans);
+			}
+			return $ans;
+		} else {
+			return false;
+		}
+	}
 	function sendPhoto($ch,$img,$text=false,$params=array()){
 		return $this->sendImg($ch,$img,$text,$params);
+	}
+	function sendFile($ch,$type,$File,$text=false,$params=array()){
+		$av=array(
+			'audio'=>array('param'=>'audio','method'=>'sendAudio'),
+			'photo'=>array('param'=>'photo','method'=>'sendPhoto'),
+			'document'=>array('param'=>'document','method'=>'sendDocument'),
+			'sticker'=>array('param'=>'sticker','method'=>'sendSticker'),
+			'video'=>array('param'=>'video','method'=>'sendVideo'),
+			'voice'=>array('param'=>'voice','method'=>'sendVoice'),
+			);
+		$type=strtolower($type);
+		if(!isset($av[$type])) {
+			return false;
+		}
+		$multipart=array();
+		if(is_array($params)) {
+			foreach ($params as $key => $value) {
+				$multipart[]=array(
+					'name'=>$key,
+					'contents'=>json_encode($value)
+					);
+			}
+		}
+		if($text!==false) {
+			// caption
+			$multipart[]=array(
+				'name'=>'caption',
+				'contents'=>$text
+				);
+		}
+
+		if(strlen($img)<1000 && is_file($img)) {
+			//photo
+			$multipart[]=array(
+				'name'=>$av[$type]['param'],
+				'contents'=>fopen($img, 'r'),
+				);
+		} elseif(strlen($img)>1000) {
+			// меньше тысячи за файл не считаем.
+			$multipart[]=array(
+				'name'=>$av[$type]['param'],
+				'contents'=>$img,
+				);			
+		} else {
+			return false;
+		}
+		$multipart[]=array(
+			'name'=>'chat_id',
+			'contents'=>$ch
+			);
+		$a=$this->Gc->post($av[$type]['method'],['multipart' => $multipart]);
+		$code = $a->getStatusCode();
+		if($code>=200 && $code<500) {
+			$body=$a->getBody();
+			$ans=new tgBotMessage($body);
+			if($this->log2db && $this->db) {
+				$this->save($ans);
+			}
+			return $ans;
+		}
 	}
 	function sendImg($ch,$img,$text=false,$params=array()){
 		$multipart=array();
@@ -119,7 +200,6 @@ class tgBot {
 			$multipart[]=array(
 				'name'=>'photo',
 				'contents'=>$img,
-				'filename' => 'file'.date('ymdHis').'.png',
 				);			
 		} else {
 			return false;
@@ -171,7 +251,7 @@ class tgBot {
 		$on=(array)$on;
 		$noOn=true;
 		foreach ($on as $value) {
-			if(in_array($value, array('audio','document','photo','sticker','video','voice','contact','location','venue','new_chat_member','left_chat_member','new_chat_title','new_chat_photo','delete_chat_photo','group_chat_created','supergroup_chat_created','channel_chat_created','pinned_message','migrate_to_chat_id','migrate_from_chat_id','callback_query','message','inline_query','chosen_inline_result','forward'))) {
+			if(in_array($value, array('audio','document','photo','sticker','video','voice','contact','location','venue','new_chat_member','left_chat_member','new_chat_title','new_chat_photo','delete_chat_photo','group_chat_created','supergroup_chat_created','channel_chat_created','pinned_message','migrate_to_chat_id','migrate_from_chat_id','callback_query','message','inline_query','chosen_inline_result','forward','pinned'))) {
 				$this->on[$value][]=$funct;
 				$noOn=false;
 			}
@@ -194,7 +274,8 @@ class tgBot {
 		}
 
 		if($this->cache!==false && is_file($this->cache.'me'.$this->botid.'.botinfo')) {
-			$this->me=json_decode(file_get_contents($this->cache.'me'.$this->botid.'.botinfo'),true)['result'];
+			$botinfo=json_decode(file_get_contents($this->cache.'me'.$this->botid.'.botinfo'),true);
+			$this->me=$botinfo['result'];
 		}
 
 		if(isset($this->me['username'])) {
@@ -206,7 +287,9 @@ class tgBot {
 		if($this->cache!==false) {
 			file_put_contents($this->cache.'me'.$this->botid.'.botinfo',$a->getBody());
 		}
-		$this->me=json_decode($a->getBody(),true)['result'];
+
+		$botinfo=json_decode($a->getBody(),true);
+		$this->me=$botinfo['result'];
 
 		if(isset($this->me['username'])) {
 			return $this->me['username'];
@@ -264,6 +347,9 @@ class tgBot {
 
 	}
 	function run($message) {
+		if($this->log2db && $this->db) {
+			$this->save($message);
+		}
 		$text=$message->getText();
 		try {
 			if($text!==false && strlen($text)>0 && count($this->matches)>0) {
@@ -298,47 +384,210 @@ class tgBot {
 			//all ok, just stop
 		}
 	}
+	function saveChats($chat) {
+		$chat['bot_id']=$this->botid;
+		$dbchat=$this->db->chat[array('id'=>$chat['id'],'bot_id'=>$chat['bot_id'])];
+		if($dbchat) {
+			if($chat['title']!=$dbchat['title'] || $chat['type']!=$dbchat['type']) {
+				$dbchat->update($chat);
+			}
+		} else{
+			$this->db->chat->insert($chat);
+		}
+	}
+	function saveUsers($users) {
+		if(is_array($users) && count($users)>0 ) {
+			$dbusers=$this->db->user->where(array('id'=>array_keys($users)));
+			foreach ($dbusers as $key => $value) {
+				$update=array();
+				if((string)@$users[$key]['first_name']!=$value['first_name']) {
+					$update['first_name']=$users[$key]['first_name'];
+				}
+				if((string)@$users[$key]['last_name']!=$value['last_name']) {
+					$update['last_name']=$users[$key]['last_name'];
+				}
+				if((string)@$users[$key]['username']!=$value['username']) {
+					$update['username']=$users[$key]['username'];
+				}
+				if(count($update)>0) {
+					$value->update($update);
+				}
+				unset($users[$key]);
+			}
+
+			if(count($users)>0) {
+				foreach ($users as $key => $value) {
+					$users[$key]['last_name']=@$value['last_name'];
+					$users[$key]['username']=@$value['username'];
+				}
+				$this->db->user->insert_multi($users);
+			}
+		}
+	}
+	function save($mes) {
+		$a=array(
+			'origin_array'=>(string)$mes,
+			'bot_id'=>$this->botid
+			);
+		if($mes->update_id()) $a['update_id']=$mes->update_id();
+		if($mes->message_id()) $a['message_id']=$mes->message_id();
+		if($mes->getFromID()) $a['user_id']=$mes->getFromID();
+		if($mes->getChatID()) $a['chat_id']=$mes->getChatID();
+		if($mes->getDate()) $a['date']=$mes->getDate();
+		if($mes->getText()) $a['text']=$mes->getText();
+		if($mes->getFileArray()) $a['photo_array']=$mes->getFileArray();
+		$this->db->chat->insert($a);
+
+		$this->saveUsers($mes->getAllUsers());
+		$this->saveChats($mes->getChat());
+
+	}
 
 }
 
 class tgBotMessage {
 	private $data;
+	private $json;
+	/*
+{"ok":true,"result":{"message_id":46414,"from":{"id":118563163,"first_name":"Bot Despe.Ru","username":"DespeRuBot"},"chat":{"id":47193446,"first_name":"Sergey Zakhvataev","type":"private"},"date":1461577661,"text":"\u0412\u044b\u0441\u0442\u0430\u0432\u0438\u0442\u0435 \u043e\u0446\u0435\u043d\u043a\u0443 \u0437\u0430 \u041f\u043e\u043b\u0435 (\u041b\u044e\u0431\u043e\u0435 \u0447\u0438\u0441\u043b\u043e \u043e\u0442 0 \u0434\u043e 40, \u043c\u043e\u0436\u043d\u043e \u0432\u043e\u0441\u043f\u043e\u043b\u044c\u0437\u043e\u0432\u0430\u0442\u044c\u0441\u044f \u043a\u043b\u0430\u0432\u0438\u0430\u0442\u0443\u0440\u043e\u0439, \u0438\u043b\u0438 \u043d\u0430\u0431\u0440\u0430\u0442\u044c \u0441\u0430\u043c\u043e\u043c\u0443)","entities":[{"type":"bold","offset":20,"length":4},{"type":"italic","offset":25,"length":79}]}}
+	*/
 	function __construct($json) {
+		$this->json=$json;
 		$this->data=json_decode($json,true);
 	}
 	function __toString() {
-		return json_encode($this->data);
+		return $this->json;
+	}
+	function getChat() {
+		$m=$this->getMessage();
+		if($m) {
+			if(isset($m['chat'])) {
+				$out=$m['chat'];
+			}
+		}
+		if($out['type']=='private') {
+			$out['title']=trim($out['first_name'].' '.$out['last_name']).(strlen(@$out['username'])>0?' (@'.$out['username'].')':'');
+			unset($out['first_name']);
+			unset($out['last_name']);
+			unset($out['username']);
+		}
+		return $out;
+	}
+	function getAllUsers() {
+		$out=array();
+		$m=$this->getMessage();
+		if($m) {
+			$a=array('forward_from','from','new_chat_member','left_chat_member');
+			foreach ($a as $t) {
+				if(isset($m[$t])) $out[$m[$t]['id']]=$m[$t];
+			}
+			if(isset($m['pinned_message'])) {
+				foreach ($a as $t) {
+					if(isset($m['pinned_message'][$t])) $out[$m['pinned_message'][$t]['id']]=$m['pinned_message'][$t];
+				}				
+			}
+			if(isset($m['reply_to_message'])) {
+				foreach ($a as $t) {
+					if(isset($m['reply_to_message'][$t])) $out[$m['reply_to_message'][$t]['id']]=$m['reply_to_message'][$t];
+				}				
+			}
+			
+		}
+		if(isset($this->data['callback_query']['from'])) {
+			$out[$this->data['callback_query']['from']['id']]=$this->data['callback_query']['from'];
+		}
+		if(isset($this->data['result']['first_name'])) {
+			$out[$this->data['result']['id']]=$this->data['result'];
+		}
+
+		if(count($out)>0) {
+			return $out;
+		} else {
+			return false;
+		}
+
+	}
+	function update_id() {
+		if(isset($this->data['update_id'])) {
+			return $this->data['update_id'];
+		} else return false;
+	}
+	function message_id() {
+		$m=$this->getMessage();
+		if(isset($m['message_id'])) {
+			return $m['message_id'];
+		} else return false;
+	}
+	function getFromID() {
+		$m=$this->getMessage();
+		if(isset($m['user']['id'])) {
+			return $m['user']['id'];
+		} else return false;
+	}
+	function getChatID() {
+		$m=$this->getMessage();
+		if(isset($m['chat']['id'])) {
+			return $m['chat']['id'];
+		} else return false;
+	}
+	function getDate() {
+		$m=$this->getMessage();
+		if(isset($m['date'])) {
+			return $m['date'];
+		} else return false;
+	}
+	function getFileArray() {
+		$a=array('audio','document','photo','sticker','video','voice','contact','location','venue','new_chat_photo');
+		$m=$this->getMessage();
+		foreach ($a as $type) {
+			if(isset($m[$type])) {
+				return $m[$type];
+			}
+		}
+		return false;
+	}
+	function getMessage() {
+		if(isset($this->data['message'])) {
+			$m=$this->data['message'];
+		} elseif(isset($this->data['result']['message_id'])) {
+			$m=$this->data['result'];
+		} elseif(isset($this->data['callback_query']['message'])) {
+			$m=$this->data['callback_query']['message'];
+		}
+
+		return $m;
 	}
 	function getChannelID() {
-		if(isset($this->data['message']['chat']['id'])) {
-			return $this->data['message']['chat']['id'];
-		} elseif(isset($this->data['callback_query']['message']['chat']['id'])) {
-			return $this->data['callback_query']['message']['chat']['id'];
+		$m=$this->getMessage();
+		if(isset($m['chat']['id'])) {
+			return $m['chat']['id'];
 		} else {
 			return false;
 		}
 	}
 	function getUserID() {
-		if(isset($this->data['message']['from']['id'])) {
-			return $this->data['message']['from']['id'];
-		} elseif(isset($this->data['callback_query']['message']['from']['id'])) {
-			return $this->data['callback_query']['message']['from']['id'];
+		$m=$this->getMessage();
+		if(isset($m['from']['id'])) {
+			return $m['from']['id'];
 		} else {
 			return false;
 		}
 	}
 	function error() {
-		if($data['ok']) {
+		if(!isset($data['ok']) || $data['ok']) {
 			return false;
 		} elseif(isset($data['description']) && isset($data['error_code'])) {
 			return 'Code: '.$data['error_code'].' '.$data['description'];
+		} else {
+			return 'Error Unknown';
 		}
 	}
 	function getText() {
-		if(isset($this->data['message']['text'])) {
-			return $this->data['message']['text'];
-		}elseif(isset($this->data['message']['caption'])) {
-			return $this->data['message']['caption'];
+		$m=$this->getMessage();
+		if(isset($m['text'])) {
+			return $m['text'];
+		}elseif(isset($m['caption'])) {
+			return $m['caption'];
 		//}elseif(isset($this->data['inline_query']['query'])) {
 		//	return $this->data['inline_query']['query'];
 		} else return false;
@@ -347,12 +596,16 @@ class tgBotMessage {
 		if(in_array($key, array('callback_query','message','inline_query','chosen_inline_result')) && isset($this->data[$key])) {
 			return true;
 		}
+		$m=$this->getMessage();
 
-		if(in_array($key, array('forward')) && isset($this->data['message']['forward_from'])) {
+		if(in_array($key, array('forward')) && isset($m['forward_from'])) {
+			return true;
+		}
+		if(in_array($key, array('pinned')) && isset($m['pinned_message'])) {
 			return true;
 		}
 
-		if(isset($this->data['message'][$key])) {
+		if(isset($m[$key])) {
 			return true;
 		}
 	}
