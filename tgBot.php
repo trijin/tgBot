@@ -67,7 +67,7 @@ class tgBot {
 	}
 	function sendHTML($ch,$text,$params=array()){
 		$params['parse_mode']='HTML';
-		$this->send($ch,$text,$params);
+		return $this->send($ch,$text,$params);
 	}
 	function send($ch,$text,$params=array()){
 		$array=is_array($params)?$params:array();
@@ -448,11 +448,9 @@ class tgBot {
 class tgBotMessage {
 	private $data;
 	private $json;
-	/*
-{"ok":true,"result":{"message_id":46414,"from":{"id":118563163,"first_name":"Bot Despe.Ru","username":"DespeRuBot"},"chat":{"id":47193446,"first_name":"Sergey Zakhvataev","type":"private"},"date":1461577661,"text":"\u0412\u044b\u0441\u0442\u0430\u0432\u0438\u0442\u0435 \u043e\u0446\u0435\u043d\u043a\u0443 \u0437\u0430 \u041f\u043e\u043b\u0435 (\u041b\u044e\u0431\u043e\u0435 \u0447\u0438\u0441\u043b\u043e \u043e\u0442 0 \u0434\u043e 40, \u043c\u043e\u0436\u043d\u043e \u0432\u043e\u0441\u043f\u043e\u043b\u044c\u0437\u043e\u0432\u0430\u0442\u044c\u0441\u044f \u043a\u043b\u0430\u0432\u0438\u0430\u0442\u0443\u0440\u043e\u0439, \u0438\u043b\u0438 \u043d\u0430\u0431\u0440\u0430\u0442\u044c \u0441\u0430\u043c\u043e\u043c\u0443)","entities":[{"type":"bold","offset":20,"length":4},{"type":"italic","offset":25,"length":79}]}}
-	*/
+
 	function __construct($json) {
-		$this->json=$json;
+		$this->json=(string)$json;
 		$this->data=json_decode($json,true);
 	}
 	function __toString() {
@@ -588,8 +586,6 @@ class tgBotMessage {
 			return $m['text'];
 		}elseif(isset($m['caption'])) {
 			return $m['caption'];
-		//}elseif(isset($this->data['inline_query']['query'])) {
-		//	return $this->data['inline_query']['query'];
 		} else return false;
 	}
 	function is($key) {
