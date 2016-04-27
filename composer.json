@@ -14,7 +14,7 @@
         }
     ]
     ,"require": {
-        "php": ">=5.3",
+        "php": ">=5.5",
         "guzzlehttp/guzzle": "~6.0",
         "trijin/notorm": "dev-master"
     }
